@@ -492,9 +492,34 @@ class DetectMultiBackend(nn.Module):
             model.half() if fp16 else model.float()
             self.model = model  # explicitly assign for to(), cpu(), cuda(), half()
         elif jit:  # TorchScript
-            LOGGER.info(f"Loading {w} for TorchScript inference...")
+            
             extra_files = {"config.txt": ""}  # model metadata
-            # TODO: decrypt model here with password from filename. Load decrypted model as a BytesIO objecy into the torch.jit.load 
+            if "__DEC_START__" in w and "__DEC_END__" in w:  # encrypted
+                from cryptography.hazmat.backends import default_backend
+                from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+                from cryptography.hazmat.primitives import padding as sym_padding
+                from cryptography.hazmat.backends import default_backend
+                from io import BytesIO
+                dec_info = w.split("__DEC_START__")[1].split("__DEC_END__")[0]
+                file_path = w.split("__DEC_START__")[0] + w.split("__DEC_END__")[1]
+                key, iv = dec_info.split("__DEC_SEP__")
+                key = key.encode()
+                iv = iv.encode()
+                
+                with open(file_path, 'rb') as file:
+                    # read the content of the file
+                    data = file.read()
+                    padder = sym_padding.PKCS7(algorithms.AES.block_size).padder()
+                    padded_data = padder.update(data) + padder.finalize()
+                    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+                    decryptor = cipher.decryptor()
+                    ct = decryptor.update(padded_data) 
+                    ct = ct + decryptor.finalize()
+                    w = BytesIO(ct)
+                LOGGER.info(f"Loading {file_path} for TorchScript inference...")
+            else:
+                LOGGER.info(f"Loading {w} for TorchScript inference...")
+                    
             model = torch.jit.load(w, _extra_files=extra_files, map_location=device)
             model.half() if fp16 else model.float()
             if extra_files["config.txt"]:  # load metadata dict
