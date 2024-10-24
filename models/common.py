@@ -494,6 +494,7 @@ class DetectMultiBackend(nn.Module):
         elif jit:  # TorchScript
             LOGGER.info(f"Loading {w} for TorchScript inference...")
             extra_files = {"config.txt": ""}  # model metadata
+            # TODO: decrypt model here with password from filename. Load decrypted model as a BytesIO objecy into the torch.jit.load 
             model = torch.jit.load(w, _extra_files=extra_files, map_location=device)
             model.half() if fp16 else model.float()
             if extra_files["config.txt"]:  # load metadata dict
